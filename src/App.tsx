@@ -11,6 +11,7 @@ import {
   Check, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import regulationData from './regulation.json';
 
 // --- Constants & Types ---
 const CARD_STANDARD_CM = 8.56; 
@@ -22,6 +23,7 @@ type RegulationResult = {
   length: string;
   status: 'pass' | 'violation' | 'unknown';
   message: string;
+  closedSeasonInfo?: string;
 };
 
 const MOCK_SPECIES = "참돔 (Red Sea Bream)";
@@ -128,39 +130,64 @@ export default function App() {
     const calculatedLengthValue = ((fishDist / cardDist) * CARD_STANDARD_CM);
     const calculatedLength = calculatedLengthValue.toFixed(1);
 
-    try {
-      let location = null;
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject);
-        });
-        location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      } catch (e) {}
+    // Finding regulation data
+    const speciesKey = Object.keys(regulationData).find(key => 
+      species.includes(key) || key.includes(species)
+    );
+    const reg = speciesKey ? (regulationData as any)[speciesKey] : null;
 
-      const response = await fetch("http://localhost:8000/check_regulation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ species, length: calculatedLength, location }),
-      });
+    let status: 'pass' | 'violation' | 'unknown' = 'pass';
+    let message = `${species}의 금지체장 기준을 통과했습니다.`;
+    let closedSeasonInfo = "";
 
-      if (response.ok) {
-        const data = await response.json();
-        setResult(data);
-      } else {
-        setResult({
-          length: calculatedLength,
-          status: calculatedLengthValue >= 24 ? 'pass' : 'violation',
-          message: calculatedLengthValue >= 24 
-            ? `${species}의 금지체장 기준(24cm)을 통과했습니다.` 
-            : `${species}의 금지체장(24cm) 미만입니다. 즉시 방생해주세요.`
-        });
+    if (reg) {
+      const { min_length, closed_season, region_notes } = reg;
+      const currentMonth = new Date().getMonth() + 1; // 1-12
+      const [start, end] = closed_season;
+
+      // 1. Check Length
+      if (min_length !== null && calculatedLengthValue < min_length) {
+        status = 'violation';
+        message = `${speciesKey}의 금지체장은 ${min_length}cm입니다. 현재 ${calculatedLength}cm로 방생 대상입니다.`;
       }
+
+      // 2. Check Closed Season
+      if (start !== null && end !== null) {
+        let isClosed = false;
+        if (start <= end) {
+          isClosed = currentMonth >= start && currentMonth <= end;
+        } else {
+          // Cross-year (e.g., 12 to 1)
+          isClosed = currentMonth >= start || currentMonth <= end;
+        }
+
+        if (isClosed) {
+          status = 'violation';
+          message = min_length !== null && calculatedLengthValue < min_length
+            ? `${message} 또한 현재 금어기(${region_notes})입니다.`
+            : `현재 ${speciesKey}의 금어기(${region_notes})입니다. 즉시 방생해주세요.`;
+          closedSeasonInfo = `금어기 안내: ${region_notes}`;
+        }
+      }
+    } else {
+      status = 'unknown';
+      message = `어종(${species})에 대한 정확한 규정 정보를 찾을 수 없습니다. 현지 규정을 확인하세요.`;
+    }
+
+    try {
+      setResult({
+        length: calculatedLength,
+        status,
+        message,
+        closedSeasonInfo
+      });
       setStep(3);
     } catch (err) {
+      console.error("Regulation check error:", err);
       setResult({
         length: calculatedLength,
         status: calculatedLengthValue >= 24 ? 'pass' : 'violation',
-        message: `(데모) 측정된 길이는 ${calculatedLength}cm 입니다.`
+        message: `규정 확인 중 오류가 발생했습니다. (측정: ${calculatedLength}cm)`
       });
       setStep(3);
     } finally {
@@ -417,14 +444,14 @@ export default function App() {
                     </motion.div>
 
                     <h3 className={`text-3xl font-black mb-3 leading-none ${
-                        result.status === 'pass' ? 'text-emerald-900' : 'text-orange-900'
+                        result.status === 'pass' ? 'text-emerald-900' : result.status === 'violation' ? 'text-orange-900' : 'text-sky-900'
                     }`}>
-                      {result.status === 'pass' ? '방생 불필요' : '금지 체장 위반'}
+                      {result.status === 'pass' ? '방생 불필요' : result.status === 'violation' ? '금지 체장 위반' : '정보 없음'}
                     </h3>
-                    <p className={`text-sm font-bold opacity-80 leading-relaxed max-w-[220px] ${
-                        result.status === 'pass' ? 'text-emerald-700' : 'text-orange-700'
+                    <p className={`text-sm font-bold opacity-80 leading-relaxed px-4 ${
+                        result.status === 'pass' ? 'text-emerald-700' : result.status === 'violation' ? 'text-orange-700' : 'text-sky-700'
                     }`}>
-                      {result.status === 'pass' ? '기준 체장을 통과했습니다. 풍성한 낚시 되세요!' : '지금 즉시 방생해주세요. 수산자원을 보호해주세요!'}
+                      {result.message}
                     </p>
                   </div>
 
@@ -433,19 +460,25 @@ export default function App() {
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">판독 어종</span>
                       <span className="font-bold text-slate-900 text-lg">{species}</span>
                     </div>
+                    {result.closedSeasonInfo && (
+                      <div className="bg-amber-50/50 border border-amber-100 px-6 py-4 rounded-2xl">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-1">금어기 정보</p>
+                        <p className="text-xs font-bold text-amber-900">{result.closedSeasonInfo}</p>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center bg-white/70 backdrop-blur px-6 py-7 rounded-[2.5rem] border border-white">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">최종 체장</span>
-                      <span className={`text-5xl font-black ${result.status === 'pass' ? 'text-emerald-600' : 'text-orange-600'}`}>
+                      <span className={`text-5xl font-black ${result.status === 'pass' ? 'text-emerald-600' : result.status === 'violation' ? 'text-orange-600' : 'text-sky-600'}`}>
                         {result.length} <span className="text-xl">cm</span>
                       </span>
                     </div>
                   </div>
 
-                  {result.status !== 'pass' && (
+                  {(result.status === 'violation') && (
                     <div className="mt-8 flex items-start gap-3 bg-white/50 p-5 rounded-2xl border border-orange-100">
                       <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
                       <p className="text-[11px] font-bold leading-relaxed text-orange-900">
-                      수산자원 관리법에 따라 해당 크기의 {species} 채취는 금지되어 있습니다. 적발 시 과태료가 부과될 수 있습니다.
+                      수산자원 관리법에 따라 금지된 개체 채취 시 과태료가 부과될 수 있습니다. 미래의 바다를 위해 방생해주세요.
                       </p>
                     </div>
                   )}
