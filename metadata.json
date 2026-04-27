@@ -1,0 +1,6 @@
+{
+  "name": "스마트 어종 판독기",
+  "description": "AI 기반 어종 분석 및 금지체장 자동 측정 서비스",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": []
+}
