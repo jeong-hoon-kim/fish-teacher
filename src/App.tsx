@@ -8,13 +8,30 @@ import {
   Camera, Upload, Fish, Waves, 
   Info, AlertCircle, RotateCcw, 
   ChevronRight, AlertTriangle, HelpCircle,
-  Check, X
+  Check, X, ChevronLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import regulationData from './regulation.json';
 
 // --- Constants & Types ---
 const CARD_STANDARD_CM = 8.56; 
+
+const SPECIES_MAP: Record<string, string> = {
+  "Korea rockfish": "조피볼락",
+  "Rock bream": "돌돔",
+  "Olive flounder": "넙치",
+  "Red seabream": "참돔",
+  "Black porgy": "감성돔"
+};
+
+const MEASUREMENT_GUIDE: Record<string, { icon: string, text: string }> = {
+  "전장": { icon: "🐟↔️", text: "입 끝부터 꼬리 끝까지 측정해주세요." },
+  "체반폭": { icon: "↔️", text: "지느러미 양 끝의 가장 넓은 폭을 측정해주세요." },
+  "항문장": { icon: "🐟-🍑", text: "입 끝부터 항문까지의 길이를 측정해주세요." },
+  "외투장": { icon: "🦑", text: "다리를 제외한 몸통(외투막) 길이를 측정해주세요." },
+  "두흉갑장": { icon: "🦀", text: "게나 새우의 등껍질 길이를 측정해주세요." },
+  "각장": { icon: "🐚", text: "껍데기의 가장 긴 길이를 측정해주세요." },
+};
 
 type Step = 1 | 2 | 3;
 type ClickMode = 'card' | 'fish';
@@ -36,6 +53,7 @@ export default function App() {
   const [points, setPoints] = useState<{ card: Point[]; fish: Point[] }>({ card: [], fish: [] });
   const [clickMode, setClickMode] = useState<ClickMode>('card');
   const [result, setResult] = useState<RegulationResult | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
@@ -65,17 +83,28 @@ export default function App() {
 
       if (response.ok) {
         const data = await response.json();
-        setSpecies(data.species || MOCK_SPECIES);
+        // 영어 어종명을 한글로 변환
+        const korName = SPECIES_MAP[data.species] || data.species || MOCK_SPECIES;
+        setSpecies(korName);
       } else {
         setSpecies(MOCK_SPECIES);
       }
       setStep(2);
+      setShowGuide(true); // 판독 완료 후 가이드 팝업 띄우기
     } catch (err) {
       console.error("Predict API Error:", err);
       setSpecies(MOCK_SPECIES);
       setStep(2);
+      setShowGuide(true);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (step === 2) {
+      setStep(1);
+      resetPoints();
     }
   };
 
@@ -206,23 +235,26 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F0F9FF] flex flex-col items-center justify-start font-sans relative overflow-x-hidden selection:bg-sky-200">
-      {/* Background Decor */}
-      <div className="absolute w-24 h-24 bg-white/40 rounded-full blur-xl top-10 left-10 pointer-events-none"></div>
-      <div className="absolute w-32 h-32 bg-sky-200/50 rounded-full blur-2xl bottom-20 right-10 pointer-events-none"></div>
-      <div className="absolute w-16 h-16 bg-blue-100/60 rounded-full blur-lg top-1/2 left-20 pointer-events-none"></div>
-
       <main className="w-full max-w-[420px] min-h-[700px] sm:min-h-[850px] bg-white rounded-none sm:rounded-[3rem] shadow-2xl border-0 sm:border-[8px] border-white flex flex-col relative z-10 overflow-hidden sm:my-8 transform-gpu transition-all">
         
         {/* App Header */}
         <div className="px-6 pt-10 pb-4 bg-gradient-to-b from-sky-100 to-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              {step === 2 && (
+                <button 
+                  onClick={handleBack}
+                  className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-sky-50 text-sky-500 hover:bg-sky-50 transition-colors mr-1"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+              )}
               <div className="w-12 h-12 bg-sky-500 rounded-2xl flex items-center justify-center shadow-lg shadow-sky-200">
                 <Fish className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h1 className="text-sky-900 font-bold text-xl tracking-tight leading-none">스마트 어종 판독기</h1>
-                <p className="text-[10px] text-sky-400 font-black uppercase tracking-widest mt-1">Ocean AI Assistant</p>
+                <h1 className="text-sky-900 font-black text-2xl tracking-tight leading-none">생선선생</h1>
+                <p className="text-[10px] text-sky-400 font-black uppercase tracking-widest mt-1">스마트 어종 판독기</p>
               </div>
             </div>
             <button className="p-2 text-sky-400 hover:text-sky-600 transition-colors">
@@ -253,7 +285,7 @@ export default function App() {
                 className="h-full flex flex-col pt-4"
               >
                 <div className="mb-8">
-                  <h2 className="text-2xl font-black text-sky-900 leading-tight">낚싯대를 던지기 전,<br />한 번만 확인하세요! 🎣</h2>
+                  <h2 className="text-2xl font-black text-sky-900 leading-tight">쉽고 빠르게 금어기,<br />금지체장을 확인하세요! 🎣</h2>
                   <p className="text-sm text-sky-500 mt-2 font-medium">실시간 AI가 어종과 크기를 분석해드립니다.</p>
                 </div>
 
@@ -501,21 +533,80 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        {/* Footer Wave */}
-        <div className="absolute bottom-0 w-full h-32 bg-sky-500/5 pointer-events-none transform translate-y-16">
-          <svg className="w-full" viewBox="0 0 1440 320" preserveAspectRatio="none">
-            <path fill="#0EA5E9" fillOpacity="0.1" d="M0,192L48,176C96,160,192,128,288,133.3C384,139,480,181,576,181.3C672,181,768,139,864,138.7C960,139,1056,181,1152,181.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
-          </svg>
-        </div>
+        {/* Footer Wave (Hide on step 1) */}
+        {step !== 1 && (
+          <div className="absolute bottom-0 w-full h-32 bg-sky-500/5 pointer-events-none transform translate-y-16">
+            <svg className="w-full" viewBox="0 0 1440 320" preserveAspectRatio="none">
+              <path fill="#0EA5E9" fillOpacity="0.1" d="M0,192L48,176C96,160,192,128,288,133.3C384,139,480,181,576,181.3C672,181,768,139,864,138.7C960,139,1056,181,1152,181.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
+            </svg>
+          </div>
+        )}
       </main>
+
+      {/* Measurement Guide Modal */}
+      <AnimatePresence>
+        {showGuide && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-sky-900/40 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white rounded-[3rem] w-full max-w-sm overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 text-center">
+                <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="text-4xl">
+                    {(() => {
+                      const reg: any = (regulationData as any)[species];
+                      const standard = reg?.measurement_standard || "전장";
+                      return MEASUREMENT_GUIDE[standard]?.icon || "📏";
+                    })()}
+                  </span>
+                </div>
+                <h3 className="text-xl font-black text-sky-900 mb-2">올바른 측정 방법 안내</h3>
+                <p className="text-sky-600 font-bold mb-6">
+                  {species}의 측정 기준은 <br />
+                  <span className="inline-block mt-2 bg-sky-100 px-4 py-1.5 rounded-full text-sky-700 italic text-lg shadow-sm border border-sky-200">
+                    " {(() => {
+                      const reg: any = (regulationData as any)[species];
+                      return reg?.measurement_standard || "전장";
+                    })()} "
+                  </span>
+                  <br /> 입니다.
+                </p>
+                <div className="bg-sky-50 rounded-2xl p-5 mb-8 border border-sky-100">
+                  <p className="text-sm font-medium text-sky-800 leading-relaxed">
+                    {(() => {
+                      const reg: any = (regulationData as any)[species];
+                      const standard = reg?.measurement_standard || "전장";
+                      return MEASUREMENT_GUIDE[standard]?.text || "머리 끝부터 꼬리 끝까지 측정해주세요.";
+                    })()}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setShowGuide(false)}
+                  className="w-full bg-sky-500 hover:bg-sky-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-sky-100 transition-all active:scale-95"
+                >
+                  확인했습니다
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         ::-webkit-scrollbar {
           width: 0px;
         }
-        @import url('https://fonts.googleapis.com/css2?family=GmarketSans:wght@700&family=Outfit:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&family=Gowun+Dodum&display=swap');
         body {
-          font-family: 'Outfit', 'GmarketSans', sans-serif;
+          font-family: 'Quicksand', 'Gowun Dodum', sans-serif;
         }
       `}</style>
     </div>
