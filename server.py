@@ -37,10 +37,14 @@ async def predict(file: UploadFile = File(...)):
     
     # 4. 가장 확률이 높은 결과 반환
     if len(results) > 0 and len(results[0].boxes) > 0:
-        # 학습시킨 모델의 클래스 이름 중 첫 번째 탐지된 결과
+        # 신뢰도 임계값 설정 (예: 0.4 미만은 무시)
+        confidence = float(results[0].boxes[0].conf)
+        if confidence < 0.4:
+            print(f"⚠️ 낮은 신뢰도 ({confidence:.2f}): 탐지 무시")
+            return {"species": "알 수 없는 어종", "confidence": confidence}
+
         names = results[0].names
         class_id = int(results[0].boxes[0].cls)
-        confidence = float(results[0].boxes[0].conf)
         detected_species = names[class_id]
         
         print(f"🔍 탐지 결과: {detected_species} (확률: {confidence:.2f})")

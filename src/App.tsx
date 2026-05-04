@@ -67,50 +67,69 @@ export default function App() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const locationRetryInterval = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchLocation = () => {
-    if (navigator.geolocation) {
-      setLocationName("위치 확인 중...");
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=ko`);
-            if (response.ok) {
-              const data = await response.json();
-              const addr = data.address;
-              const province = addr.province || addr.city || addr.state || "";
-              const district = addr.borough || addr.suburb || addr.city_district || addr.county || "";
-              if (province || district) {
-                setLocationName(`${province} ${district}`.trim() || "위치 정보 없음");
-              } else {
-                setLocationName(data.display_name.split(',')[0]);
-              }
-            } else {
-              setLocationName(`위도:${latitude.toFixed(2)} 경도:${longitude.toFixed(2)}`);
-            }
-          } catch (e) {
-            setLocationName(`위도:${latitude.toFixed(2)} 경도:${longitude.toFixed(2)}`);
-          }
-        },
-        (error) => {
-          console.error("Geolocation error:", error);
-          if (error.code === 1) { // PERMISSION_DENIED
-            setLocationName("권한 거부됨 (터치하여 재시도)");
-          } else {
-            setLocationName("위치 정보 오류 (터치하여 재시도)");
-          }
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    } else {
-      setLocationName("GPS 미지원");
+  const fetchLocation = (highAccuracy = true) => {
+    if (!navigator.geolocation) {
+      setLocationName("GPS 미지원 브라우저");
+      return;
     }
+
+    setLocationName("위치 확인 중...");
+    
+    // 타임아웃을 겹쳐서 시도 (고정밀 -> 저정밀)
+    const options: PositionOptions = {
+      enableHighAccuracy: highAccuracy,
+      timeout: highAccuracy ? 6000 : 15000,
+      maximumAge: highAccuracy ? 0 : 60000
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=ko`);
+          if (response.ok) {
+            const data = await response.json();
+            const addr = data.address;
+            const province = addr.province || addr.city || addr.state || "";
+            const district = addr.borough || addr.suburb || addr.city_district || addr.county || "";
+            if (province || district) {
+              setLocationName(`${province} ${district}`.trim());
+            } else {
+              setLocationName(data.display_name.split(',')[0]);
+            }
+          } else {
+            setLocationName(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
+          }
+        } catch (e) {
+          setLocationName(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
+        }
+      },
+      (error) => {
+        console.warn("Geolocation error:", error);
+        
+        // 고정밀 시도에서 실패한 경우 저정밀로 자동 재시도
+        if (highAccuracy && error.code !== 1) {
+          console.log("Retrying with low accuracy...");
+          fetchLocation(false);
+          return;
+        }
+
+        if (error.code === 1) { // PERMISSION_DENIED
+          setLocationName("권한 거부됨 (설명보기)");
+        } else if (error.code === 3) { // TIMEOUT
+          setLocationName("위치 찾기 시간 초과");
+        } else {
+          setLocationName("위치 정보 오류");
+        }
+      },
+      options
+    );
   };
 
   // Time and Location updates
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    fetchLocation();
+    fetchLocation(true);
     return () => clearInterval(timer);
   }, []);
 
@@ -121,19 +140,22 @@ export default function App() {
 
     setIsLoading(true);
 
-    // Preview
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setImageSrc(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-
-    // Call Backend /predict
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // 1. 이미지 리사이징 (모바일 대용량 사진 호환성 및 일관성 확보)
+      const processedFile = await compressImage(file);
       
-      const response = await fetch("http://localhost:8000/predict", {
+      // Preview
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImageSrc(event.target?.result as string);
+      };
+      reader.readAsDataURL(processedFile);
+
+      // 2. AI 분석 요청 (상대 경로 사용으로 모바일 접속 지원)
+      const formData = new FormData();
+      formData.append('file', processedFile);
+      
+      const response = await fetch("/predict", {
         method: "POST",
         body: formData,
       });
@@ -142,11 +164,9 @@ export default function App() {
         const data = await response.json();
         console.log("AI Prediction Data:", data);
         
-        // 대소문자 구분 없이 매핑 시도
         const rawSpecies = data.species;
         let korName = rawSpecies;
 
-        // SPECIES_MAP에서 대소문자 무시하고 찾기
         const matchedKey = Object.keys(SPECIES_MAP).find(
           key => key.toLowerCase() === rawSpecies.toLowerCase()
         );
@@ -154,27 +174,73 @@ export default function App() {
         if (matchedKey) {
           korName = SPECIES_MAP[matchedKey];
         } else {
-          // 매핑 실패 시 원본 이름 또는 기본값
           korName = rawSpecies || MOCK_SPECIES;
         }
         
-        setSpecies(korName);
-        setConfidence(data.confidence || null);
+        // 신뢰도가 낮거나 탐지 결과가 없으면 처리
+        if (data.species === "알 수 없는 어종" || (data.confidence && data.confidence < 0.4)) {
+          setSpecies("분석 불가 (다시 촬영)");
+          setConfidence(data.confidence || 0);
+        } else {
+          setSpecies(korName);
+          setConfidence(data.confidence || null);
+        }
       } else {
         console.warn("Prediction failed, using fallback.");
         setSpecies(MOCK_SPECIES);
         setConfidence(null);
       }
       setStep(2);
-      setShowGuide(true); // 판독 완료 후 가이드 팝업 띄우기
+      setShowGuide(true);
     } catch (err) {
       console.error("Predict API Error:", err);
+      // 모바일에서 localhost 접속 불가 안내를 포함한 에러 처리
       setSpecies(MOCK_SPECIES);
       setStep(2);
       setShowGuide(true);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // 이미지 리사이징 함수 (1280px 기준)
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const MAX_SIZE = 1280;
+        
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(new File([blob], "image.jpg", { type: 'image/jpeg' }));
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', 0.82);
+      };
+      img.onerror = () => resolve(file);
+    });
   };
 
   const handleBack = () => {
@@ -366,7 +432,7 @@ export default function App() {
             </div>
                 <div className="flex flex-col items-end">
               <button 
-                onClick={fetchLocation}
+                onClick={() => fetchLocation(true)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/80 rounded-xl border border-sky-100 mb-2 shadow-sm active:scale-95 transition-transform group relative"
               >
                 <MapPin className={`w-3 h-3 ${locationName.includes('거부') ? 'text-rose-500' : 'text-sky-500'}`} />
@@ -378,15 +444,21 @@ export default function App() {
                 )}
                 
                 {locationName.includes('거부') && (
-                  <div className="absolute top-12 right-0 z-[100] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl text-[11px] w-[220px] pointer-events-none animate-in fade-in zoom-in font-medium leading-relaxed">
+                  <div className="absolute top-12 right-0 z-[100] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl text-[11px] w-[240px] pointer-events-none animate-in fade-in zoom-in font-medium leading-relaxed">
                     <p className="flex items-center gap-2 mb-2 text-rose-300 font-bold">
-                      <AlertCircle className="w-4 h-4" /> 아이폰/사파리 사용자 안내
+                      <AlertCircle className="w-4 h-4" /> 위치 설정 안내
                     </p>
-                    <p className="opacity-95">
-                      위치 권한이 거부된 상태입니다. <br/>
-                      <span className="text-sky-300 font-bold underline decoration-sky-400">설정 &gt; 사파리 &gt; 위치</span>에서 <br/>
-                      <span className="text-emerald-400 font-bold">'허용'</span>으로 변경 후 앱을 새로고침 해주세요!
-                    </p>
+                    <div className="space-y-2 opacity-95">
+                      <p>
+                        <span className="text-sky-300 font-bold">아이폰:</span> 설정 &gt; 사파리 &gt; 위치 &gt; '허용'
+                      </p>
+                      <p>
+                        <span className="text-sky-300 font-bold">갤럭시:</span> 설정 &gt; 애플리케이션 &gt; 브라우저 &gt; 권한 &gt; 위치 &gt; '허용'
+                      </p>
+                      <p className="border-t border-white/10 pt-2 text-[10px] text-slate-400">
+                        설정 변경 후 반드시 앱을 새로고침 해주세요!
+                      </p>
+                    </div>
                     <div className="absolute -top-1.5 right-6 w-3 h-3 bg-slate-900 rotate-45"></div>
                   </div>
                 )}
