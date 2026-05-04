@@ -58,22 +58,19 @@ export default function App() {
   const [locationName, setLocationName] = useState<string>("위치 확인 중...");
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const locationRetryInterval = useRef<NodeJS.Timeout | null>(null);
 
-  // Time and Location updates
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    
+  const fetchLocation = () => {
     if (navigator.geolocation) {
+      setLocationName("위치 확인 중...");
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
           try {
-            // Nominatim API for reverse geocoding (Free, open-source)
             const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=ko`);
             if (response.ok) {
               const data = await response.json();
               const addr = data.address;
-              // Attempt to extract region names (Province/City + District)
               const province = addr.province || addr.city || addr.state || "";
               const district = addr.borough || addr.suburb || addr.city_district || addr.county || "";
               if (province || district) {
@@ -88,14 +85,25 @@ export default function App() {
             setLocationName(`위도:${latitude.toFixed(2)} 경도:${longitude.toFixed(2)}`);
           }
         },
-        () => {
-          setLocationName("위치 권한 필요");
-        }
+        (error) => {
+          console.error("Geolocation error:", error);
+          if (error.code === 1) { // PERMISSION_DENIED
+            setLocationName("권한 거부됨 (터치하여 재시도)");
+          } else {
+            setLocationName("위치 정보 오류 (터치하여 재시도)");
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
       setLocationName("GPS 미지원");
     }
+  };
 
+  // Time and Location updates
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    fetchLocation();
     return () => clearInterval(timer);
   }, []);
 
@@ -331,10 +339,13 @@ export default function App() {
               </div>
             </div>
             <div className="flex flex-col items-end">
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/80 rounded-xl border border-sky-100 mb-2 shadow-sm">
+              <button 
+                onClick={fetchLocation}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/80 rounded-xl border border-sky-100 mb-2 shadow-sm active:scale-95 transition-transform"
+              >
                 <MapPin className="w-3 h-3 text-sky-500" />
                 <span className="text-[10px] font-bold text-sky-800 truncate max-w-[90px]">{locationName}</span>
-              </div>
+              </button>
               <div className="flex flex-col items-end leading-none space-y-1.5">
                 <div className="flex items-center gap-1 text-[11px] font-black text-slate-900 uppercase tracking-tight">
                   <Calendar className="w-3 h-3 text-sky-500" />

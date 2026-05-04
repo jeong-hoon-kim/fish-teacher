@@ -18,9 +18,9 @@ app.add_middleware(
 # 1. 모델 로드 (best.pt 파일이 같은 폴더에 있어야 함)
 try:
     model = YOLO("best.pt")
-    print("✅ YOLOv8 모델(best.pt) 로드 완료")
+    print("✅ YOLO 모델(best.pt) 로드 완료")
 except Exception as e:
-    print(f"❌ 모델 로드 실패: {e}")
+    print(f"❌ 모델 로드 실패 (best.pt 파일을 확인해주세요): {e}")
     model = None
 
 @app.post("/predict")
