@@ -56,6 +56,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [species, setSpecies] = useState("");
+  const [confidence, setConfidence] = useState<number | null>(null);
   const [points, setPoints] = useState<{ card: Point[]; fish: Point[] }>({ card: [], fish: [] });
   const [clickMode, setClickMode] = useState<ClickMode>('card');
   const [result, setResult] = useState<RegulationResult | null>(null);
@@ -158,9 +159,11 @@ export default function App() {
         }
         
         setSpecies(korName);
+        setConfidence(data.confidence || null);
       } else {
         console.warn("Prediction failed, using fallback.");
         setSpecies(MOCK_SPECIES);
+        setConfidence(null);
       }
       setStep(2);
       setShowGuide(true); // 판독 완료 후 가이드 팝업 띄우기
@@ -374,14 +377,15 @@ export default function App() {
                   <HelpCircle className="w-2.5 h-2.5 text-rose-400 opacity-60" />
                 )}
                 
-                {/* iOS/Safari specific instruction hint */}
                 {locationName.includes('거부') && (
-                  <div className="absolute top-10 right-0 z-[100] bg-slate-900 text-white p-3 rounded-2xl shadow-2xl text-[10px] w-[180px] pointer-events-none animate-in fade-in zoom-in font-medium">
-                    <p className="flex items-center gap-2 mb-1 text-rose-300">
-                      <AlertCircle className="w-3 h-3" /> 아이폰/사파리 사용자 안내
+                  <div className="absolute top-12 right-0 z-[100] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl text-[11px] w-[220px] pointer-events-none animate-in fade-in zoom-in font-medium leading-relaxed">
+                    <p className="flex items-center gap-2 mb-2 text-rose-300 font-bold">
+                      <AlertCircle className="w-4 h-4" /> 아이폰/사파리 사용자 안내
                     </p>
-                    <p className="opacity-90 leading-relaxed">
-                      이미 권한이 거부된 경우, <span className="text-sky-300 underline">설정 &gt; 사파리 &gt; 위치</span>에서 '허용'으로 변경해주셔야 합니다.
+                    <p className="opacity-95">
+                      위치 권한이 거부된 상태입니다. <br/>
+                      <span className="text-sky-300 font-bold underline decoration-sky-400">설정 &gt; 사파리 &gt; 위치</span>에서 <br/>
+                      <span className="text-emerald-400 font-bold">'허용'</span>으로 변경 후 앱을 새로고침 해주세요!
                     </p>
                     <div className="absolute -top-1.5 right-6 w-3 h-3 bg-slate-900 rotate-45"></div>
                   </div>
@@ -423,7 +427,7 @@ export default function App() {
                 className="h-full flex flex-col pt-4"
               >
                 <div className="mb-6 relative z-10">
-                  <h2 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">쉽고 빠르게 금어기,<br />금지체장을 확인하세요! 🎣</h2>
+                  <h2 className="text-xl font-black text-slate-900 leading-tight tracking-tight">쉽고 빠르게 금어기,<br />금지체장을 확인하세요! 🎣</h2>
                   <p className="text-sm text-sky-800 mt-2 font-bold leading-relaxed">실시간 AI와 정밀 측정을 통해 어종과 크기를<br />정확하게 분석해드립니다.</p>
                 </div>
 
@@ -474,16 +478,12 @@ export default function App() {
                   <div>
                     <p className="text-sm font-black text-slate-900 leading-tight tracking-tight">
                       판독 대상: 
-                      <select 
-                        value={species} 
-                        onChange={(e) => setSpecies(e.target.value)}
-                        className="ml-2 bg-sky-50 text-sky-600 border-none rounded-lg px-2 py-0.5 font-black focus:ring-2 focus:ring-sky-200 outline-none cursor-pointer"
-                      >
-                        {Object.values(SPECIES_MAP).map(name => (
-                          <option key={name} value={name}>{name}</option>
-                        ))}
-                        {!Object.values(SPECIES_MAP).includes(species) && <option value={species}>{species}</option>}
-                      </select>
+                      <span className="ml-2 text-sky-600 underline underline-offset-4 decoration-2">{species}</span>
+                      {confidence && (
+                        <span className="ml-2 text-[10px] bg-sky-100 text-sky-600 px-2 py-0.5 rounded-full">
+                          AI 신뢰도: {(confidence * 100).toFixed(0)}%
+                        </span>
+                      )}
                     </p>
                     <p className="text-[11px] text-slate-700 mt-1.5 font-bold italic leading-none">
                       {clickMode === 'card' 
@@ -645,7 +645,12 @@ export default function App() {
 
                   <div className="mt-12 space-y-3">
                     <div className="flex justify-between items-center bg-white/80 backdrop-blur px-8 py-5 rounded-[2rem] shadow-sm border border-white/60">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">판독 어종</span>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-sky-600">판독 어종</span>
+                        {confidence && (
+                          <span className="text-[9px] font-bold text-sky-400 mt-0.5">AI 신뢰도: {(confidence * 100).toFixed(0)}%</span>
+                        )}
+                      </div>
                       <span className="font-black text-slate-900 text-xl">{species}</span>
                     </div>
                     {result.closedSeasonInfo && (
@@ -656,8 +661,8 @@ export default function App() {
                     )}
                     <div className="flex justify-between items-center bg-slate-900 px-8 py-10 rounded-[3rem] shadow-2xl relative overflow-hidden group">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/20 blur-3xl rounded-full"></div>
-                      <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 relative z-10 leading-none">실제 측정 체장</span>
-                      <span className={`text-6xl font-black relative z-10 tracking-tighter ${result.status === 'pass' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <span className="text-[11px] font-black uppercase tracking-[0.2em] text-sky-400 relative z-10 leading-none">실제 측정 체장</span>
+                      <span className={`text-5xl font-black relative z-10 tracking-tighter ${result.status === 'pass' ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {result.length}<span className="text-xl ml-1 font-bold">cm</span>
                       </span>
                     </div>
