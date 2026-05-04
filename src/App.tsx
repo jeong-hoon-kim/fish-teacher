@@ -18,10 +18,16 @@ const CARD_STANDARD_CM = 8.56;
 
 const SPECIES_MAP: Record<string, string> = {
   "Korea rockfish": "조피볼락",
+  "Rockfish": "조피볼락",
   "Rock bream": "돌돔",
+  "Rockbream": "돌돔",
   "Olive flounder": "넙치",
+  "Flounder": "넙치",
   "Red seabream": "참돔",
-  "Black porgy": "감성돔"
+  "Red seabream (Red Sea Bream)": "참돔",
+  "Red sea bream": "참돔",
+  "Black porgy": "감성돔",
+  "Blackporgy": "감성돔"
 };
 
 const MEASUREMENT_GUIDE: Record<string, { icon: string, text: string }> = {
@@ -133,10 +139,27 @@ export default function App() {
 
       if (response.ok) {
         const data = await response.json();
-        // 영어 어종명을 한글로 변환
-        const korName = SPECIES_MAP[data.species] || data.species || MOCK_SPECIES;
+        console.log("AI Prediction Data:", data);
+        
+        // 대소문자 구분 없이 매핑 시도
+        const rawSpecies = data.species;
+        let korName = rawSpecies;
+
+        // SPECIES_MAP에서 대소문자 무시하고 찾기
+        const matchedKey = Object.keys(SPECIES_MAP).find(
+          key => key.toLowerCase() === rawSpecies.toLowerCase()
+        );
+
+        if (matchedKey) {
+          korName = SPECIES_MAP[matchedKey];
+        } else {
+          // 매핑 실패 시 원본 이름 또는 기본값
+          korName = rawSpecies || MOCK_SPECIES;
+        }
+        
         setSpecies(korName);
       } else {
+        console.warn("Prediction failed, using fallback.");
         setSpecies(MOCK_SPECIES);
       }
       setStep(2);
@@ -338,13 +361,31 @@ export default function App() {
                 <p className="text-[10px] text-teal-600 font-black uppercase tracking-[0.2em] mt-1.5 opacity-80">Ocean AI Assistant</p>
               </div>
             </div>
-            <div className="flex flex-col items-end">
+                <div className="flex flex-col items-end">
               <button 
                 onClick={fetchLocation}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/80 rounded-xl border border-sky-100 mb-2 shadow-sm active:scale-95 transition-transform"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/80 rounded-xl border border-sky-100 mb-2 shadow-sm active:scale-95 transition-transform group relative"
               >
-                <MapPin className="w-3 h-3 text-sky-500" />
-                <span className="text-[10px] font-bold text-sky-800 truncate max-w-[90px]">{locationName}</span>
+                <MapPin className={`w-3 h-3 ${locationName.includes('거부') ? 'text-rose-500' : 'text-sky-500'}`} />
+                <span className={`text-[10px] font-bold truncate max-w-[90px] ${locationName.includes('거부') ? 'text-rose-600' : 'text-sky-800'}`}>
+                  {locationName}
+                </span>
+                {locationName.includes('거부') && (
+                  <HelpCircle className="w-2.5 h-2.5 text-rose-400 opacity-60" />
+                )}
+                
+                {/* iOS/Safari specific instruction hint */}
+                {locationName.includes('거부') && (
+                  <div className="absolute top-10 right-0 z-[100] bg-slate-900 text-white p-3 rounded-2xl shadow-2xl text-[10px] w-[180px] pointer-events-none animate-in fade-in zoom-in font-medium">
+                    <p className="flex items-center gap-2 mb-1 text-rose-300">
+                      <AlertCircle className="w-3 h-3" /> 아이폰/사파리 사용자 안내
+                    </p>
+                    <p className="opacity-90 leading-relaxed">
+                      이미 권한이 거부된 경우, <span className="text-sky-300 underline">설정 &gt; 사파리 &gt; 위치</span>에서 '허용'으로 변경해주셔야 합니다.
+                    </p>
+                    <div className="absolute -top-1.5 right-6 w-3 h-3 bg-slate-900 rotate-45"></div>
+                  </div>
+                )}
               </button>
               <div className="flex flex-col items-end leading-none space-y-1.5">
                 <div className="flex items-center gap-1 text-[11px] font-black text-slate-900 uppercase tracking-tight">
@@ -431,7 +472,19 @@ export default function App() {
                     <Fish className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-black text-slate-900 leading-tight tracking-tight">판독 대상: <span className="text-sky-600 underline underline-offset-4 decoration-2">{species}</span></p>
+                    <p className="text-sm font-black text-slate-900 leading-tight tracking-tight">
+                      판독 대상: 
+                      <select 
+                        value={species} 
+                        onChange={(e) => setSpecies(e.target.value)}
+                        className="ml-2 bg-sky-50 text-sky-600 border-none rounded-lg px-2 py-0.5 font-black focus:ring-2 focus:ring-sky-200 outline-none cursor-pointer"
+                      >
+                        {Object.values(SPECIES_MAP).map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                        {!Object.values(SPECIES_MAP).includes(species) && <option value={species}>{species}</option>}
+                      </select>
+                    </p>
                     <p className="text-[11px] text-slate-700 mt-1.5 font-bold italic leading-none">
                       {clickMode === 'card' 
                         ? "📍 카드의 세로 끝부분을 순서대로 터치하세요." 
@@ -700,7 +753,7 @@ export default function App() {
                     {(() => {
                       const reg: any = (regulationData as any)[species];
                       const standard = reg?.measurement_standard || "전장";
-                      return MEASUREMENT_GUIDE[standard]?.desc || "물고기의 가장 긴 부분(머리 끝 ~ 꼬리 끝)을 측정합니다.";
+                      return MEASUREMENT_GUIDE[standard]?.text || "물고기의 가장 긴 부분(머리 끝 ~ 꼬리 끝)을 측정합니다.";
                     })()}
                   </p>
                 </div>

@@ -40,10 +40,14 @@ async def predict(file: UploadFile = File(...)):
         # 학습시킨 모델의 클래스 이름 중 첫 번째 탐지된 결과
         names = results[0].names
         class_id = int(results[0].boxes[0].cls)
+        confidence = float(results[0].boxes[0].conf)
         detected_species = names[class_id]
-        return {"species": detected_species}
+        
+        print(f"🔍 탐지 결과: {detected_species} (확률: {confidence:.2f})")
+        return {"species": detected_species, "confidence": confidence}
     
-    return {"species": "알 수 없는 어종"}
+    print("⚠️ 탐지된 물고기가 없습니다.")
+    return {"species": "알 수 없는 어종", "confidence": 0}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
