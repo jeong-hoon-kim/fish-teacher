@@ -154,7 +154,10 @@ export default function MapBoard({ records, onDelete }: MapBoardProps) {
           defaultCenter={defaultCenter}
           defaultZoom={7}
           mapId="DEMO_MAP_ID"
-          onTilesLoaded={() => setMapLoaded(true)}
+          onTilesLoaded={() => {
+            console.log('🗺️ Map tiles loaded');
+            setMapLoaded(true);
+          }}
           style={{ width: '100%', height: '100%' }}
           internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
           gestureHandling={'greedy'}
