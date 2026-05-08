@@ -4,8 +4,9 @@ import { CatchRecord } from '../types';
 import { useState } from 'react';
 import { Fish, MapPin, Calendar, Clock, Ruler } from 'lucide-react';
 
-const API_KEY = (import.meta as any).env.VITE_GOOGLE_MAPS_PLATFORM_KEY || (process.env as any).GOOGLE_MAPS_PLATFORM_KEY || '';
-const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
+// Google Maps API Hook approach
+const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_PLATFORM_KEY || '';
+const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY' && API_KEY.trim() !== '';
 
 interface MapBoardProps {
   records: CatchRecord[];
