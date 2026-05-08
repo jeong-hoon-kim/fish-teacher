@@ -62,10 +62,14 @@ const SPECIES_MAP: Record<string, string> = {
   "Olive flounder": "넙치",
   "Flounder": "넙치",
   "Red seabream": "참돔",
-  "Red seabream (Red Sea Bream)": "참돔",
   "Red sea bream": "참돔",
   "Black porgy": "감성돔",
-  "Blackporgy": "감성돔"
+  "Blackporgy": "감성돔",
+  "Sea bass": "농어",
+  "Seabass": "농어",
+  "Common octopus": "참문어",
+  "Octopus": "낙지",
+  "Squid": "살오징어"
 };
 
 const MEASUREMENT_GUIDE: Record<string, { icon: string, text: string }> = {
@@ -75,6 +79,7 @@ const MEASUREMENT_GUIDE: Record<string, { icon: string, text: string }> = {
   "외투장": { icon: "🦑", text: "다리를 제외한 몸통(외투막) 길이를 측정해주세요." },
   "두흉갑장": { icon: "🦀", text: "게나 새우의 등껍질 길이를 측정해주세요." },
   "각장": { icon: "🐚", text: "껍데기의 가장 긴 길이를 측정해주세요." },
+  "각고": { icon: "🐚↕️", text: "껍데기의 높이(가장 높은 부분)를 측정해주세요." },
 };
 
 type Step = 1 | 2 | 3;
@@ -380,8 +385,8 @@ export default function App() {
       console.error("Regulation check error:", err);
       setResult({
         length: calculatedLength,
-        status: calculatedLengthValue >= 24 ? 'pass' : 'violation',
-        message: `규정 확인 중 오류가 발생했습니다. (측정: ${calculatedLength}cm)`
+        status: 'unknown',
+        message: `규정 확인 중 오류가 발생했습니다: ${species} (측정: ${calculatedLength}cm)`
       });
       setStep(3);
     } finally {
