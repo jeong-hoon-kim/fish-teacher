@@ -1,12 +1,25 @@
 import React from 'react';
 import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useAdvancedMarkerRef } from '@vis.gl/react-google-maps';
 import { CatchRecord } from '../types';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Fish, MapPin, Calendar, Clock, Ruler } from 'lucide-react';
 
-// Google Maps API Key - Now handled via process.env in vite.config.ts
-const API_KEY = (process.env as any).GOOGLE_MAPS_PLATFORM_KEY || (import.meta as any).env.VITE_GOOGLE_MAPS_PLATFORM_KEY || '';
-const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY' && API_KEY.trim() !== '';
+// API Key detection logic
+const getApiKey = () => {
+  // Check common locations for the key
+  const viteKey = (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY;
+  const envKey = (process.env as any)?.GOOGLE_MAPS_PLATFORM_KEY;
+  const windowKey = (window as any)?._env_?.VITE_GOOGLE_MAPS_PLATFORM_KEY;
+  
+  const key = viteKey || envKey || windowKey || '';
+  return key.replace(/["']/g, '').trim(); // Remove any accidental quotes
+};
+
+const API_KEY = getApiKey();
+const hasValidKey = Boolean(API_KEY) && 
+                   API_KEY !== 'YOUR_API_KEY' && 
+                   API_KEY !== 'undefined' && 
+                   API_KEY.length > 20; // Most GMP keys are long
 
 interface MapBoardProps {
   records: CatchRecord[];
@@ -27,7 +40,7 @@ function MarkerWithInfoWindow({ record }: { record: CatchRecord, [key: string]: 
           <div className="absolute -inset-2 bg-sky-500/20 rounded-full blur-sm opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div className="w-10 h-10 bg-white rounded-2xl shadow-xl flex items-center justify-center border-2 border-sky-500 transform hover:scale-110 transition-transform cursor-pointer relative z-10 overflow-hidden">
              {record.image ? (
-               <img src={record.image} alt={record.species} className="w-full h-full object-cover" />
+               <img src={record.image} alt={record.species} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
              ) : (
                <Fish className="w-5 h-5 text-sky-500" />
              )}
@@ -67,6 +80,15 @@ function MarkerWithInfoWindow({ record }: { record: CatchRecord, [key: string]: 
 }
 
 export default function MapBoard({ records }: MapBoardProps) {
+  useEffect(() => {
+    if (hasValidKey) {
+      const maskedKey = `${API_KEY.substring(0, 4)}...${API_KEY.substring(API_KEY.length - 4)}`;
+      console.log('📍 Google Maps API Key Loaded:', maskedKey);
+    } else {
+      console.warn('⚠️ Google Maps API Key is missing or invalid.');
+    }
+  }, []);
+
   if (!hasValidKey) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-slate-50">
@@ -107,22 +129,26 @@ export default function MapBoard({ records }: MapBoardProps) {
     : { lat: 36.5, lng: 127.5 }; // South Korea center
 
   return (
-    <div className="flex-1 relative w-full h-[600px] md:h-full min-h-[500px]">
-      <APIProvider apiKey={API_KEY} version="weekly">
-        <Map
-          defaultCenter={defaultCenter}
-          defaultZoom={7}
-          mapId="FISH_MAP_ID"
-          style={{ width: '100%', height: '100%' }}
-          internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-          gestureHandling={'greedy'}
-          disableDefaultUI={true}
-        >
-          {records.map((record) => (
-            <MarkerWithInfoWindow key={record.id} record={record} />
-          ))}
-        </Map>
-      </APIProvider>
+    <div className="flex-1 relative w-full h-full min-h-[500px] bg-slate-100 overflow-hidden">
+      <div className="absolute inset-0 z-0 text-slate-400 flex items-center justify-center italic text-xs">
+        {/* Fallback background */}
+        지도 로딩 중...
+        <APIProvider apiKey={API_KEY} version="weekly" onLoad={() => console.log('🗺️ Google Maps API Loaded successfully')}>
+          <Map
+            defaultCenter={defaultCenter}
+            defaultZoom={7}
+            mapId="DEMO_MAP_ID"
+            style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}
+            internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+            gestureHandling={'greedy'}
+            disableDefaultUI={true}
+          >
+            {records.map((record) => (
+              <MarkerWithInfoWindow key={record.id} record={record} />
+            ))}
+          </Map>
+        </APIProvider>
+      </div>
       
       <div className="absolute top-6 left-6 right-6 pointer-events-none">
         <div className="bg-white/90 backdrop-blur-md px-6 py-4 rounded-3xl shadow-2xl border border-white/50 pointer-events-auto flex items-center justify-between">
