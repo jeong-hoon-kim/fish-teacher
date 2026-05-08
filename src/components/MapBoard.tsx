@@ -26,52 +26,80 @@ interface MapBoardProps {
   onDelete?: (id: string) => void;
 }
 
-function MarkerWithInfoWindow({ record }: { record: CatchRecord, [key: string]: any }) {
+const MarkerWithInfoWindow: React.FC<{ records: CatchRecord[]; onDelete?: (id: string) => void }> = ({ records, onDelete }) => {
   const [markerRef, marker] = useAdvancedMarkerRef();
   const [open, setOpen] = useState(false);
+  const firstRecord = records[0];
+  const count = records.length;
 
   return (
     <>
       <AdvancedMarker
         ref={markerRef}
-        position={{ lat: record.location.latitude, lng: record.location.longitude }}
+        position={{ lat: firstRecord.location.latitude, lng: firstRecord.location.longitude }}
         onClick={() => setOpen(true)}
       >
         <div className="relative group">
           <div className="absolute -inset-2 bg-sky-500/20 rounded-full blur-sm opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div className="w-10 h-10 bg-white rounded-2xl shadow-xl flex items-center justify-center border-2 border-sky-500 transform hover:scale-110 transition-transform cursor-pointer relative z-10 overflow-hidden">
-             {record.image ? (
-               <img src={record.image} alt={record.species} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+             {firstRecord.image ? (
+               <img src={firstRecord.image} alt={firstRecord.species} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
              ) : (
                <Fish className="w-5 h-5 text-sky-500" />
              )}
           </div>
-          <div className="absolute top-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full -translate-y-1/3 translate-x-1/3 z-20 shadow-sm"></div>
+          {count > 1 ? (
+             <div className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm z-30">
+               {count}
+             </div>
+          ) : (
+             <div className="absolute top-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full -translate-y-1/3 translate-x-1/3 z-20 shadow-sm"></div>
+          )}
         </div>
       </AdvancedMarker>
       {open && (
         <InfoWindow anchor={marker} onCloseClick={() => setOpen(false)}>
-          <div className="p-2 min-w-[180px]">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center">
-                <Fish className="w-6 h-6 text-sky-500" />
-              </div>
-              <div>
-                <h4 className="font-black text-slate-900 leading-tight">{record.species}</h4>
-                <p className="text-[10px] text-slate-500 font-bold">{new Date(record.capturedAt).toLocaleDateString()}</p>
-              </div>
+          <div className="p-1 max-w-[240px]">
+            <div className="mb-2 pb-2 border-b border-slate-100">
+               <h4 className="text-xs font-black text-slate-400 uppercase tracking-tight truncate max-w-[200px]">
+                 {firstRecord.location.name}
+               </h4>
+               <p className="text-[10px] font-bold text-slate-500">{count}개의 기록</p>
             </div>
-            <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100">
-               <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase">크기</p>
-                  <p className="text-sm font-black text-sky-600 leading-none mt-1">{record.length}cm</p>
-               </div>
-               <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase">위치</p>
-                  <p className="text-[10px] font-bold text-slate-700 leading-tight mt-1 truncate max-w-[80px]">
-                    {record.location.name}
-                  </p>
-               </div>
+            <div className="max-h-[280px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+             {records.map((r) => (
+                  <div key={r.id} className="group/item flex items-center gap-3 p-2 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white hover:border-sky-200 transition-all">
+                     <div className="w-10 h-10 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-slate-200">
+                        {r.image ? (
+                           <img src={r.image} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                           <div className="w-full h-full flex items-center justify-center">
+                              <Fish className="w-4 h-4 text-sky-400" />
+                           </div>
+                        )}
+                     </div>
+                     <div className="min-w-0 flex-1">
+                        <div className="flex justify-between items-start gap-1">
+                           <p className="font-black text-slate-900 text-sm truncate">{r.species}</p>
+                           <p className="text-sky-600 font-black text-xs whitespace-nowrap">{r.length}cm</p>
+                        </div>
+                        <div className="flex justify-between items-center mt-0.5">
+                           <p className="text-[10px] text-slate-500 font-bold">{new Date(r.capturedAt).toLocaleDateString()}</p>
+                           {onDelete && (
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 if(confirm('이 기록을 삭제하시겠습니까?')) onDelete(r.id);
+                               }}
+                               className="text-[9px] font-black text-rose-400 hover:text-rose-600 opacity-0 group-hover/item:opacity-100 transition-opacity uppercase"
+                             >
+                               삭제
+                             </button>
+                           )}
+                        </div>
+                     </div>
+                  </div>
+               ))}
             </div>
           </div>
         </InfoWindow>
@@ -121,18 +149,26 @@ export default function MapBoard({ records, onDelete }: MapBoardProps) {
     );
   }
 
-  // Calculate default center (average of records or current location)
+  // Group records by identical coordinates (approx. 1 meter precision)
+  const groupedSpots = records.reduce((acc, record) => {
+    // 0.00001 degrees is approximately 1.1 meters
+    const key = `${record.location.latitude.toFixed(5)},${record.location.longitude.toFixed(5)}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(record);
+    return acc;
+  }, {} as Record<string, CatchRecord[]>);
+
+  // Calculate default center (average of all records or default to Korea)
   const defaultCenter = records.length > 0
     ? {
         lat: records.reduce((acc, r) => acc + r.location.latitude, 0) / records.length,
         lng: records.reduce((acc, r) => acc + r.location.longitude, 0) / records.length
       }
-    : { lat: 36.5, lng: 127.5 }; // South Korea center
+    : { lat: 36.5, lng: 127.5 };
 
   return (
     <div className="flex-1 relative w-full h-full min-h-[500px] bg-slate-100 overflow-hidden">
       <div className="absolute inset-0 z-0 text-slate-400 flex items-center justify-center italic text-xs">
-        {/* Fallback background */}
         지도 로딩 중...
         <APIProvider apiKey={API_KEY} version="weekly" onLoad={() => console.log('🗺️ Google Maps API Loaded successfully')}>
           <Map
@@ -144,8 +180,8 @@ export default function MapBoard({ records, onDelete }: MapBoardProps) {
             gestureHandling={'greedy'}
             disableDefaultUI={true}
           >
-            {records.map((record) => (
-              <MarkerWithInfoWindow key={record.id} record={record} />
+            {Object.entries(groupedSpots).map(([key, spotRecords]) => (
+              <MarkerWithInfoWindow key={key} records={spotRecords} onDelete={onDelete} />
             ))}
           </Map>
         </APIProvider>
