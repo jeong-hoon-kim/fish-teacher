@@ -20,8 +20,39 @@ import { CatchRecord } from './types';
 import HistoryBoard from './components/HistoryBoard';
 import MapBoard from './components/MapBoard';
 
-// --- Constants & Types ---
+  // --- Constants & Types ---
 const CARD_STANDARD_CM = 8.56; 
+const MAX_IMAGE_DIMENSION = 800; // Resize large images for Firestore 1MB limit
+
+const compressImage = (base64: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_IMAGE_DIMENSION) {
+          height *= MAX_IMAGE_DIMENSION / width;
+          width = MAX_IMAGE_DIMENSION;
+        }
+      } else {
+        if (height > MAX_IMAGE_DIMENSION) {
+          width *= MAX_IMAGE_DIMENSION / height;
+          height = MAX_IMAGE_DIMENSION;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compress to JPEG
+    };
+  });
+};
 
 const SPECIES_MAP: Record<string, string> = {
   "Korea rockfish": "조피볼락",
@@ -362,6 +393,9 @@ export default function App() {
     if (!user || !result || !coords) return;
     setIsSaving(true);
     try {
+      // Compress image before saving to fit in Firestore 1MB limit
+      const finalImage = imageSrc ? await compressImage(imageSrc) : null;
+
       await addDoc(collection(db, 'catches'), {
         userId: user.uid,
         species,
@@ -372,15 +406,21 @@ export default function App() {
           name: locationName
         },
         capturedAt: new Date().toISOString(),
-        image: imageSrc, // imageSrc is base64
+        image: finalImage, 
         status: result.status
       });
       alert("성공적으로 기록되었습니다! '기록' 탭에서 확인하세요.");
       restart();
       setActiveTab('history');
-    } catch (err) {
+    } catch (err: any) {
       console.error("Save catch error:", err);
-      alert("기록 저장 중 오류가 발생했습니다.");
+      if (err.message?.includes('permission-denied')) {
+        alert("기록 저장 권한이 없습니다. 보안 규칙 문제이거나 사진 용량이 너무 클 수 있습니다.");
+      } else if (err.message?.includes('quota-exceeded')) {
+        alert("파이어베이스 무료 사용량이 초과되었습니다. 내일 다시 시도해주세요.");
+      } else {
+        alert("기록 저장 중 오류가 발생했습니다: " + (err.message || "알 수 없는 오류"));
+      }
     } finally {
       setIsSaving(false);
     }

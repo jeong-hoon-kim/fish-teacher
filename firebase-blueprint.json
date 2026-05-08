@@ -17,9 +17,10 @@
           }
         },
         "capturedAt": { "type": "string", "format": "date-time", "description": "When the fish was caught." },
-        "image": { "type": "string", "description": "Base64 encoded string or URL of the fish image." }
+        "image": { "type": "string", "description": "Base64 encoded string or URL of the fish image." },
+        "status": { "type": "string", "enum": ["pass", "violation", "unknown"], "description": "Regulation check status." }
       },
-      "required": ["userId", "species", "length", "location", "capturedAt"]
+      "required": ["userId", "species", "length", "location", "capturedAt", "status"]
     },
     "user": {
       "title": "User Profile",

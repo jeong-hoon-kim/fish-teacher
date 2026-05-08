@@ -54,7 +54,8 @@ service cloud.firestore {
           && data.location.longitude is number
           && data.location.name is string && data.location.name.size() <= 200
           && data.capturedAt is string // assuming ISO string
-          && (data.get('image', null) == null || (data.image is string && data.image.size() <= 2097152)); // Limit 2MB for base64
+          && data.status is string && data.status.size() <= 20
+          && (data.get('image', null) == null || (data.image is string && data.image.size() <= 1048576)); // Limit 1MB for base64
       }
 
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
@@ -67,7 +68,7 @@ service cloud.firestore {
       allow update: if isOwner(existing().userId)
         && isValidCatch(incoming())
         && incoming().userId == existing().userId // Immutable owner
-        && incoming().diff(existing()).affectedKeys().hasOnly(['species', 'length', 'location', 'image']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['species', 'length', 'location', 'image', 'status']);
         
       allow delete: if isOwner(existing().userId);
     }
