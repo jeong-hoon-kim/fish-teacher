@@ -8,10 +8,17 @@ import {
   Camera, Upload, Fish, Waves, 
   Info, AlertCircle, RotateCcw, 
   ChevronRight, AlertTriangle, HelpCircle,
-  Check, X, ChevronLeft, MapPin, Calendar, Clock
+  Check, X, ChevronLeft, MapPin, Calendar, Clock,
+  History, Map as MapIcon, LogIn, LogOut, Save, User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import regulationData from './regulation.json';
+import { db, auth, signInWithGoogle, signOut } from './lib/firebase';
+import { collection, addDoc, query, where, onSnapshot, orderBy, deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { CatchRecord } from './types';
+import HistoryBoard from './components/HistoryBoard';
+import MapBoard from './components/MapBoard';
 
 // --- Constants & Types ---
 const CARD_STANDARD_CM = 8.56; 
@@ -52,8 +59,13 @@ type RegulationResult = {
 const MOCK_SPECIES = "참돔 (Red Sea Bream)";
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<'capture' | 'history' | 'map'>('capture');
+  const [user, setUser] = useState<User | null>(null);
+  const [records, setRecords] = useState<CatchRecord[]>([]);
+
   const [step, setStep] = useState<Step>(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [species, setSpecies] = useState("");
   const [confidence, setConfidence] = useState<number | null>(null);
@@ -63,9 +75,38 @@ export default function App() {
   const [showGuide, setShowGuide] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [locationName, setLocationName] = useState<string>("위치 확인 중...");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const locationRetryInterval = useRef<NodeJS.Timeout | null>(null);
+
+  // Firebase Auth & Data
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) {
+        // Save user to users collection for reference
+        setDoc(doc(db, 'users', u.uid), {
+          userId: u.uid,
+          email: u.email,
+          displayName: u.displayName
+        }, { merge: true });
+
+        // Listen to catches
+        const q = query(
+          collection(db, 'catches'),
+          where('userId', '==', u.uid),
+          orderBy('capturedAt', 'desc')
+        );
+        return onSnapshot(q, (snapshot) => {
+          const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CatchRecord));
+          setRecords(list);
+        });
+      } else {
+        setRecords([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const fetchLocation = (highAccuracy = true) => {
     if (!navigator.geolocation) {
@@ -85,6 +126,7 @@ export default function App() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
+        setCoords({ lat: latitude, lng: longitude });
         try {
           const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=ko`);
           if (response.ok) {
@@ -140,20 +182,17 @@ export default function App() {
 
     setIsLoading(true);
 
-    try {
-      // 1. 이미지 리사이징 (모바일 대용량 사진 호환성 및 일관성 확보)
-      const processedFile = await compressImage(file);
-      
-      // Preview
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImageSrc(event.target?.result as string);
-      };
-      reader.readAsDataURL(processedFile);
+    // Preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setImageSrc(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
 
-      // 2. AI 분석 요청 (상대 경로 사용으로 모바일 접속 지원)
+    // AI 분석 요청
+    try {
       const formData = new FormData();
-      formData.append('file', processedFile);
+      formData.append('file', file);
       
       const response = await fetch("/predict", {
         method: "POST",
@@ -177,14 +216,8 @@ export default function App() {
           korName = rawSpecies || MOCK_SPECIES;
         }
         
-        // 신뢰도가 낮거나 탐지 결과가 없으면 처리
-        if (data.species === "알 수 없는 어종" || (data.confidence && data.confidence < 0.4)) {
-          setSpecies("분석 불가 (다시 촬영)");
-          setConfidence(data.confidence || 0);
-        } else {
-          setSpecies(korName);
-          setConfidence(data.confidence || null);
-        }
+        setSpecies(korName);
+        setConfidence(data.confidence || null);
       } else {
         console.warn("Prediction failed, using fallback.");
         setSpecies(MOCK_SPECIES);
@@ -194,53 +227,12 @@ export default function App() {
       setShowGuide(true);
     } catch (err) {
       console.error("Predict API Error:", err);
-      // 모바일에서 localhost 접속 불가 안내를 포함한 에러 처리
       setSpecies(MOCK_SPECIES);
       setStep(2);
       setShowGuide(true);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // 이미지 리사이징 함수 (1280px 기준)
-  const compressImage = (file: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const MAX_SIZE = 1280;
-        
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height *= MAX_SIZE / width;
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width *= MAX_SIZE / height;
-            height = MAX_SIZE;
-          }
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(new File([blob], "image.jpg", { type: 'image/jpeg' }));
-          } else {
-            resolve(file);
-          }
-        }, 'image/jpeg', 0.82);
-      };
-      img.onerror = () => resolve(file);
-    });
   };
 
   const handleBack = () => {
@@ -366,6 +358,43 @@ export default function App() {
     }
   };
 
+  const saveRecord = async () => {
+    if (!user || !result || !coords) return;
+    setIsSaving(true);
+    try {
+      await addDoc(collection(db, 'catches'), {
+        userId: user.uid,
+        species,
+        length: parseFloat(result.length),
+        location: {
+          latitude: coords.lat,
+          longitude: coords.lng,
+          name: locationName
+        },
+        capturedAt: new Date().toISOString(),
+        image: imageSrc, // imageSrc is base64
+        status: result.status
+      });
+      alert("성공적으로 기록되었습니다! '기록' 탭에서 확인하세요.");
+      restart();
+      setActiveTab('history');
+    } catch (err) {
+      console.error("Save catch error:", err);
+      alert("기록 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteRecord = async (id: string) => {
+    if (!window.confirm("기록을 삭제할까요?")) return;
+    try {
+      await deleteDoc(doc(db, 'catches', id));
+    } catch (err) {
+      console.error("Delete record error:", err);
+    }
+  };
+
   const restart = () => {
     setStep(1);
     setImageSrc(null);
@@ -377,8 +406,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#010a1a] flex flex-col items-center justify-start font-sans relative overflow-x-hidden selection:bg-sky-200">
-      <main className="w-full max-w-[420px] min-h-[700px] sm:min-h-[850px] bg-gradient-to-b from-white via-white to-sky-50 rounded-none sm:rounded-[3.5rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] border-0 sm:border-[1px] border-white/20 flex flex-col relative z-20 overflow-hidden sm:my-8 transform-gpu transition-all">
+      <main className="w-full max-w-[420px] min-h-[700px] sm:min-h-[850px] bg-gradient-to-b from-white via-white to-sky-50 rounded-none sm:rounded-[3.5rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.8)] border-0 sm:border-[1px] border-white/20 flex flex-col relative z-20 overflow-hidden sm:my-8 transform-gpu transition-all pb-24">
         
+        {activeTab === 'capture' ? (
+          <>
         {/* Internal Sea Background Elements */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden h-full z-0">
           <div className="absolute top-[-5%] left-[-10%] w-[70%] h-[40%] bg-sky-200/30 rounded-full blur-[100px]"></div>
@@ -431,6 +462,22 @@ export default function App() {
               </div>
             </div>
                 <div className="flex flex-col items-end">
+              {user ? (
+                <button 
+                  onClick={signOut}
+                  className="p-1.5 rounded-full bg-slate-100 text-slate-500 mb-2 hover:bg-rose-50 hover:text-rose-500 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              ) : (
+                <button 
+                  onClick={signInWithGoogle}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/80 rounded-xl border border-sky-100 mb-2 shadow-sm active:scale-95 transition-transform"
+                >
+                  <LogIn className="w-3 h-3 text-sky-600" />
+                  <span className="text-[10px] font-black text-sky-900">로그인</span>
+                </button>
+              )}
               <button 
                 onClick={() => fetchLocation(true)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/80 rounded-xl border border-sky-100 mb-2 shadow-sm active:scale-95 transition-transform group relative"
@@ -751,11 +798,31 @@ export default function App() {
                 </div>
 
                 <div className="mt-auto space-y-4 pb-8 px-2">
+                  {result.status === 'pass' && (
+                    <button 
+                      disabled={isSaving || !user}
+                      onClick={saveRecord}
+                      className={`w-full font-black py-6 rounded-[2.5rem] shadow-xl transform active:scale-95 flex items-center justify-center gap-4 text-xl border-b-4 transition-all
+                        ${!user 
+                          ? 'bg-slate-200 text-slate-400 border-slate-300' 
+                          : 'bg-emerald-500 text-white border-emerald-700 hover:brightness-110 shadow-emerald-200'}`}
+                    >
+                      {isSaving ? (
+                         <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      ) : (
+                        <>
+                          <Save className="w-6 h-6" />
+                          기록하기
+                          {!user && <span className="text-[10px] opacity-60">(로그인 필요)</span>}
+                        </>
+                      )}
+                    </button>
+                  )}
                   <button 
                     onClick={restart}
-                    className="w-full bg-gradient-to-r from-sky-600 via-teal-600 to-sky-600 bg-[length:200%_auto] hover:bg-right text-white font-black py-7 rounded-[2.5rem] shadow-[0_20px_40px_-10px_rgba(14,165,233,0.3)] transition-all transform active:scale-95 flex items-center justify-center gap-4 text-xl"
+                    className="w-full bg-slate-100 text-slate-500 font-black py-5 rounded-[2.5rem] shadow-sm transition-all transform active:scale-95 flex items-center justify-center gap-3 text-lg border-b-4 border-slate-200"
                   >
-                    <RotateCcw className="w-6 h-6" />
+                    <RotateCcw className="w-5 h-5" />
                     다시 측정하기
                   </button>
                 </div>
@@ -763,10 +830,49 @@ export default function App() {
             )}
           </AnimatePresence>
         </div>
+      </>
+    ) : activeTab === 'history' ? (
+      <HistoryBoard records={records} onDelete={deleteRecord} />
+    ) : (
+      <MapBoard records={records} />
+    )}
 
-        {/* Footer Waves (Hide on step 1) */}
-        {step !== 1 && (
-          <div className="absolute bottom-0 w-full h-48 pointer-events-none z-10">
+        {/* Bottom Tab Navigation */}
+        <div className="absolute bottom-0 w-full h-24 bg-white/80 backdrop-blur-xl border-t border-sky-100 z-[60] px-6 flex items-center justify-between shadow-[0_-10px_30px_rgba(0,0,0,0.05)] rounded-t-[3.5rem] sm:rounded-b-[3.5rem]">
+           <button 
+            onClick={() => setActiveTab('capture')}
+            className={`flex flex-col items-center justify-center gap-1.5 transition-all flex-1 ${activeTab === 'capture' ? 'text-sky-600' : 'text-slate-400 opacity-60'}`}
+           >
+             <div className={`p-2 rounded-2xl transition-all ${activeTab === 'capture' ? 'bg-sky-50 shadow-inner' : ''}`}>
+               <Camera className={`w-6 h-6 transition-transform ${activeTab === 'capture' ? 'scale-110' : ''}`} />
+             </div>
+             <span className="text-[10px] font-black uppercase tracking-widest">측정</span>
+           </button>
+           
+           <button 
+            onClick={() => setActiveTab('history')}
+            className={`flex flex-col items-center justify-center gap-1.5 transition-all flex-1 ${activeTab === 'history' ? 'text-sky-600' : 'text-slate-400 opacity-60'}`}
+           >
+             <div className={`p-2 rounded-2xl transition-all ${activeTab === 'history' ? 'bg-sky-50 shadow-inner' : ''}`}>
+               <History className={`w-6 h-6 transition-transform ${activeTab === 'history' ? 'scale-110' : ''}`} />
+             </div>
+             <span className="text-[10px] font-black uppercase tracking-widest">기록</span>
+           </button>
+
+           <button 
+            onClick={() => setActiveTab('map')}
+            className={`flex flex-col items-center justify-center gap-1.5 transition-all flex-1 ${activeTab === 'map' ? 'text-sky-600' : 'text-slate-400 opacity-60'}`}
+           >
+             <div className={`p-2 rounded-2xl transition-all ${activeTab === 'map' ? 'bg-sky-50 shadow-inner' : ''}`}>
+               <MapIcon className={`w-6 h-6 transition-transform ${activeTab === 'map' ? 'scale-110' : ''}`} />
+             </div>
+             <span className="text-[10px] font-black uppercase tracking-widest">지도</span>
+           </button>
+        </div>
+
+        {/* Footer Waves (Hide on step 1 or other tabs) */}
+        {(activeTab === 'capture' && step !== 1) && (
+          <div className="absolute bottom-24 w-full h-48 pointer-events-none z-10">
             <motion.div 
               animate={{ x: [0, -100, 0] }}
               transition={{ duration: 10, repeat: Infinity, ease: "linear" }}

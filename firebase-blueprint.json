@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "catch": {
+      "title": "Catch Record",
+      "description": "Information about a fish caught by a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the user who caught the fish." },
+        "species": { "type": "string", "description": "The name of the fish species." },
+        "length": { "type": "number", "description": "The length of the fish in cm." },
+        "location": {
+          "type": "object",
+          "properties": {
+            "latitude": { "type": "number" },
+            "longitude": { "type": "number" },
+            "name": { "type": "string", "description": "The readable location name." }
+          }
+        },
+        "capturedAt": { "type": "string", "format": "date-time", "description": "When the fish was caught." },
+        "image": { "type": "string", "description": "Base64 encoded string or URL of the fish image." }
+      },
+      "required": ["userId", "species", "length", "location", "capturedAt"]
+    },
+    "user": {
+      "title": "User Profile",
+      "description": "User profile information.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" }
+      },
+      "required": ["userId", "email"]
+    }
+  },
+  "firestore": {
+    "catches": {
+      "schema": "catch",
+      "description": "Collection of fish catch records."
+    },
+    "users": {
+      "schema": "user",
+      "description": "Collection of user profiles."
+    }
+  }
+}

@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Collections ---
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && incoming().userId == userId
+        && incoming().email is string
+        && incoming().email.size() <= 256;
+      allow update: if isOwner(userId)
+        && incoming().userId == userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email']);
+    }
+
+    // 2. Catches Collection
+    match /catches/{catchId} {
+      // Helper for validation
+      function isValidCatch(data) {
+        return data.userId == request.auth.uid
+          && data.species is string && data.species.size() <= 100
+          && data.length is number && data.length > 0 && data.length < 500
+          && data.location is map
+          && data.location.latitude is number
+          && data.location.longitude is number
+          && data.location.name is string && data.location.name.size() <= 200
+          && data.capturedAt is string // assuming ISO string
+          && (data.get('image', null) == null || (data.image is string && data.image.size() <= 2097152)); // Limit 2MB for base64
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() 
+        && isValidCatch(incoming())
+        && isValidId(catchId);
+        
+      allow update: if isOwner(existing().userId)
+        && isValidCatch(incoming())
+        && incoming().userId == existing().userId // Immutable owner
+        && incoming().diff(existing()).affectedKeys().hasOnly(['species', 'length', 'location', 'image']);
+        
+      allow delete: if isOwner(existing().userId);
+    }
+  }
+}
