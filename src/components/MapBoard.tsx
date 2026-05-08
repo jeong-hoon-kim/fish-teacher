@@ -2,7 +2,7 @@ import React from 'react';
 import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useAdvancedMarkerRef } from '@vis.gl/react-google-maps';
 import { CatchRecord } from '../types';
 import { useEffect, useState } from 'react';
-import { Fish, MapPin, Calendar, Clock, Ruler } from 'lucide-react';
+import { Fish, MapPin, Calendar, Clock, Ruler, Trash2 } from 'lucide-react';
 
 // API Key detection logic
 const getApiKey = () => {
@@ -23,9 +23,15 @@ const hasValidKey = Boolean(API_KEY) &&
 
 interface MapBoardProps {
   records: CatchRecord[];
+  onDelete: (id: string) => void;
 }
 
-function MarkerWithInfoWindow({ record }: { record: CatchRecord, [key: string]: any }) {
+interface MarkerWithInfoWindowProps {
+  record: CatchRecord;
+  onDelete: (id: string) => void;
+}
+
+const MarkerWithInfoWindow: React.FC<MarkerWithInfoWindowProps> = ({ record, onDelete }) => {
   const [markerRef, marker] = useAdvancedMarkerRef();
   const [open, setOpen] = useState(false);
 
@@ -65,11 +71,17 @@ function MarkerWithInfoWindow({ record }: { record: CatchRecord, [key: string]: 
                   <p className="text-[9px] font-black text-slate-400 uppercase">크기</p>
                   <p className="text-sm font-black text-sky-600 leading-none mt-1">{record.length}cm</p>
                </div>
-               <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase">위치</p>
-                  <p className="text-[10px] font-bold text-slate-700 leading-tight mt-1 truncate max-w-[80px]">
-                    {record.location.name}
-                  </p>
+               <div className="flex flex-col items-end justify-center">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(record.id);
+                    }}
+                    className="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 transition-colors shadow-sm"
+                    title="기록 삭제"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                </div>
             </div>
           </div>
@@ -79,7 +91,7 @@ function MarkerWithInfoWindow({ record }: { record: CatchRecord, [key: string]: 
   );
 }
 
-export default function MapBoard({ records }: MapBoardProps) {
+export default function MapBoard({ records, onDelete }: MapBoardProps) {
   const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
@@ -149,7 +161,7 @@ export default function MapBoard({ records }: MapBoardProps) {
           disableDefaultUI={true}
         >
           {records.map((record) => (
-            <MarkerWithInfoWindow key={record.id} record={record} />
+            <MarkerWithInfoWindow key={record.id} record={record} onDelete={onDelete} />
           ))}
         </Map>
       </APIProvider>

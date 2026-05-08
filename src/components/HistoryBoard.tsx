@@ -3,7 +3,7 @@ import { CatchRecord, SortOption } from '../types';
 import { 
   Calendar, Ruler, Fish, MapPin, 
   ArrowUpDown, Search, ChevronRight,
-  TrendingDown, TrendingUp, X, Clock
+  TrendingDown, TrendingUp, Trash2, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -119,12 +119,13 @@ export default function HistoryBoard({ records, onDelete }: HistoryBoardProps) {
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-end justify-between py-1">
                    <button 
                     onClick={() => onDelete(record.id)}
-                    className="p-2 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-2.5 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 hover:text-rose-600 transition-all active:scale-90 shadow-sm"
+                    title="기록 삭제"
                    >
-                     <X className="w-4 h-4" />
+                     <Trash2 className="w-4 h-4" />
                    </button>
                    <div className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
                      record.status === 'pass' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'

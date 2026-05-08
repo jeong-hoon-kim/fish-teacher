@@ -227,8 +227,25 @@ export default function App() {
 
     // AI 분석 요청
     try {
+      const startTime = Date.now();
+      console.log("🚀 AI 분석 시작...");
+
+      // 1. 이미지 압축 및 변환 (속도 향상을 위해 필요)
+      const readerForCompress = new FileReader();
+      const compressedFile: File = await new Promise((resolve) => {
+        readerForCompress.onload = async (event) => {
+          const compressedDataUrl = await compressImage(event.target?.result as string);
+          const response = await fetch(compressedDataUrl);
+          const blob = await response.blob();
+          resolve(new File([blob], 'analyzing.jpg', { type: 'image/jpeg' }));
+        };
+        readerForCompress.readAsDataURL(file);
+      });
+
+      console.log(`📦 이미지 압축 완료 (${(compressedFile.size / 1024).toFixed(1)}KB)`);
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
       
       const response = await fetch("/predict", {
         method: "POST",
@@ -237,7 +254,8 @@ export default function App() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("AI Prediction Data:", data);
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`✅ AI 분석 완료 (${duration}초):`, data);
         
         const rawSpecies = data.species;
         let korName = rawSpecies;
@@ -879,7 +897,7 @@ export default function App() {
     ) : activeTab === 'history' ? (
       <HistoryBoard records={records} onDelete={deleteRecord} />
     ) : (
-      <MapBoard records={records} />
+      <MapBoard records={records} onDelete={deleteRecord} />
     )}
 
         {/* Bottom Tab Navigation */}
