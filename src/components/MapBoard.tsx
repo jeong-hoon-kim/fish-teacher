@@ -4,8 +4,8 @@ import { CatchRecord } from '../types';
 import { useState } from 'react';
 import { Fish, MapPin, Calendar, Clock, Ruler } from 'lucide-react';
 
-// Google Maps API Hook approach
-const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_PLATFORM_KEY || '';
+// Google Maps API Key - Now handled via process.env in vite.config.ts
+const API_KEY = (process.env as any).GOOGLE_MAPS_PLATFORM_KEY || (import.meta as any).env.VITE_GOOGLE_MAPS_PLATFORM_KEY || '';
 const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY' && API_KEY.trim() !== '';
 
 interface MapBoardProps {
@@ -89,7 +89,7 @@ export default function MapBoard({ records }: MapBoardProps) {
             </li>
             <li className="flex items-center gap-2">
               <div className="w-5 h-5 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center flex-shrink-0">3</div>
-              'GOOGLE_MAPS_PLATFORM_KEY' 추가
+              'VITE_GOOGLE_MAPS_PLATFORM_KEY' 추가
             </li>
           </ul>
         </div>
@@ -107,13 +107,13 @@ export default function MapBoard({ records }: MapBoardProps) {
     : { lat: 36.5, lng: 127.5 }; // South Korea center
 
   return (
-    <div className="h-full relative">
+    <div className="flex-1 relative w-full h-[600px] md:h-full min-h-[500px]">
       <APIProvider apiKey={API_KEY} version="weekly">
         <Map
           defaultCenter={defaultCenter}
           defaultZoom={7}
           mapId="FISH_MAP_ID"
-          className="w-full h-full"
+          style={{ width: '100%', height: '100%' }}
           internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
           gestureHandling={'greedy'}
           disableDefaultUI={true}
