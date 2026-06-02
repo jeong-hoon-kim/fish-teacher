@@ -1,8 +1,15 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Virtual environments
+venv/
+.venv/
+env/
+# Local configuration & credentials
 .env*
 !.env.example
+*.log
