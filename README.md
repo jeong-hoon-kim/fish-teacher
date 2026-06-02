@@ -10,8 +10,6 @@
 [![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com/)
 
 **생선선생**은 낚시 현장에서 갓 잡은 물고기를 실시간 AI로 판독하고 법적 규정(금지체장, 금어기) 준수 여부를 판단해주는 스마트 어종 판독 및 자동 계측 웹 애플리케이션입니다.
-
-[AI Studio 앱에서 보기](https://ai.studio/apps/ebadf1c6-de6b-45fb-85cf-6dc00860a596)
 </div>
 
 ---
