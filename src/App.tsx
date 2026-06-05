@@ -55,16 +55,49 @@ const compressImage = (base64: string): Promise<string> => {
 };
 
 const SPECIES_MAP: Record<string, string> = {
-  "Korea rockfish": "조피볼락",
-  "Rockfish": "조피볼락",
+  // 기존 5종 및 영문/학명 매핑
+  "Korea rockfish": "조피볼락(우럭)",
+  "Rockfish": "조피볼락(우럭)",
+  "Korean rockfish": "조피볼락(우럭)",
+  "Sebastes schlegelii": "조피볼락(우럭)",
   "Rock bream": "돌돔",
   "Rockbream": "돌돔",
-  "Olive flounder": "넙치",
-  "Flounder": "넙치",
+  "Oplegnathus fasciatus": "돌돔",
+  "Olive flounder": "넙치(광어)",
+  "Flounder": "넙치(광어)",
+  "Paralichthys olivaceus": "넙치(광어)",
   "Red seabream": "참돔",
   "Red sea bream": "참돔",
+  "Pagrus major": "참돔",
   "Black porgy": "감성돔",
   "Blackporgy": "감성돔",
+  "Acanthopagrus schlegelii": "감성돔",
+
+  // 신규 추가 어종 (갈치 제외 16종 매핑)
+  "Chub mackerel": "고등어",
+  "Scomber japonicus": "고등어",
+  "Snakehead": "가물치",
+  "Channa argus": "가물치",
+  "White trevally": "흑점줄전갱이",
+  "Pseudocaranx dentex": "흑점줄전갱이",
+  "Flathead grey mullet": "숭어",
+  "Mugil cephalus": "숭어",
+  "Freshwater Eel": "뱀장어(민물장어)",
+  "Anguilla japonica": "뱀장어(민물장어)",
+  "belone belone": "학꽁치",
+  "Hyporhamphus sajori": "학꽁치",
+  "Japanese amberjack": "방어",
+  "Seriola quinqueradiata": "방어",
+  "Black Scraper": "말쥐치",
+  "Thamnaconus modestus": "말쥐치",
+  "Japanese Spanish mackerel": "삼치",
+  "Scomberomorus niphonius": "삼치",
+  "Silver sillago": "보리멸",
+  "Sillago sihama": "보리멸",
+  "Bluefin gurnard": "성대",
+  "Chelidonichthys spinosus": "성대",
+
+  // 기타 기존 어종
   "Sea bass": "농어",
   "Seabass": "농어",
   "Common octopus": "참문어",
@@ -80,6 +113,19 @@ const MEASUREMENT_GUIDE: Record<string, { icon: string, text: string }> = {
   "두흉갑장": { icon: "🦀", text: "게나 새우의 등껍질 길이를 측정해주세요." },
   "각장": { icon: "🐚", text: "껍데기의 가장 긴 길이를 측정해주세요." },
   "각고": { icon: "🐚↕️", text: "껍데기의 높이(가장 높은 부분)를 측정해주세요." },
+};
+
+const FORK_FACTORS: Record<string, number> = {
+  "참돔": 1.08,
+  "감성돔": 1.08,
+  "돌돔": 1.05,
+  "고등어": 1.10,
+  "삼치": 1.10,
+  "방어": 1.10,
+  "흑점줄전갱이": 1.10,
+  "숭어": 1.08,
+  "보리멸": 1.03,
+  "성대": 1.02
 };
 
 type Step = 1 | 2 | 3;
@@ -107,6 +153,8 @@ export default function App() {
   const [confidence, setConfidence] = useState<number | null>(null);
   const [points, setPoints] = useState<{ card: Point[]; fish: Point[] }>({ card: [], fish: [] });
   const [clickMode, setClickMode] = useState<ClickMode>('card');
+  const [draggedPoint, setDraggedPoint] = useState<{ type: 'card' | 'fish'; index: number } | null>(null);
+  const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
   const [result, setResult] = useState<RegulationResult | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -211,6 +259,58 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
+  // 4. Drag & Drop for Points
+  useEffect(() => {
+    if (!draggedPoint) return;
+
+    const handleMove = (clientX: number, clientY: number) => {
+      const rect = canvasContainerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+
+      setPoints(prev => {
+        const updatedList = [...prev[draggedPoint.type]];
+        if (draggedPoint.index < updatedList.length) {
+          updatedList[draggedPoint.index] = { x, y };
+        }
+        return {
+          ...prev,
+          [draggedPoint.type]: updatedList
+        };
+      });
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      handleMove(e.clientX, e.clientY);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 0) return;
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    };
+
+    const handleMouseUp = () => {
+      setDraggedPoint(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [draggedPoint]);
+
   // 1. Image Upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -260,8 +360,9 @@ export default function App() {
         const rawSpecies = data.species;
         let korName = rawSpecies;
 
+        const cleanRaw = (rawSpecies || "").replace(/_/g, ' ').toLowerCase().trim();
         const matchedKey = Object.keys(SPECIES_MAP).find(
-          key => key.toLowerCase() === rawSpecies.toLowerCase()
+          key => key.replace(/_/g, ' ').toLowerCase().trim() === cleanRaw
         );
 
         if (matchedKey) {
@@ -272,6 +373,15 @@ export default function App() {
         
         setSpecies(korName);
         setConfidence(data.confidence || null);
+
+        // 자동 검출된 카드 및 물고기 점 좌표 자동 설정
+        if (data.card_points && data.card_points.length === 2) {
+          setPoints(prev => ({ ...prev, card: data.card_points }));
+          setClickMode('fish');
+        }
+        if (data.fish_points && data.fish_points.length === 2) {
+          setPoints(prev => ({ ...prev, fish: data.fish_points }));
+        }
       } else {
         console.warn("Prediction failed, using fallback.");
         setSpecies(MOCK_SPECIES);
@@ -344,7 +454,13 @@ export default function App() {
       Math.pow(points.fish[1].y - points.fish[0].y, 2)
     );
 
-    const calculatedLengthValue = ((fishDist / cardDist) * CARD_STANDARD_CM);
+    // V자형 꼬리 어종 보정 계수 적용 (가랑이체장 -> 전장 변환)
+    const speciesKeyForFactor = Object.keys(FORK_FACTORS).find(key => 
+      species.includes(key) || key.includes(species)
+    );
+    const forkFactor = speciesKeyForFactor ? FORK_FACTORS[speciesKeyForFactor] : 1.00;
+
+    const calculatedLengthValue = ((fishDist / cardDist) * CARD_STANDARD_CM) * forkFactor;
     const calculatedLength = calculatedLengthValue.toFixed(1);
 
     // Finding regulation data
@@ -465,6 +581,7 @@ export default function App() {
     setClickMode('card');
     setResult(null);
     setSpecies("");
+    setImageAspectRatio(null);
   };
 
   return (
@@ -676,11 +793,20 @@ export default function App() {
                 </div>
 
                 {/* Main Interaction Area */}
-                <div className="relative w-full aspect-[4/5] bg-slate-900 rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.2)] border-4 border-white cursor-crosshair group">
+                <div 
+                  style={{ aspectRatio: imageAspectRatio ? `${imageAspectRatio}` : '4/5' }}
+                  className="relative w-full bg-slate-900 rounded-[3rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.2)] border-4 border-white cursor-crosshair group transition-all duration-300"
+                >
                   {imageSrc ? (
                     <img 
                       src={imageSrc} 
-                      className="absolute inset-0 w-full h-full object-contain pointer-events-none z-0 opacity-90" 
+                      onLoad={(e) => {
+                        const { naturalWidth, naturalHeight } = e.currentTarget;
+                        if (naturalWidth && naturalHeight) {
+                          setImageAspectRatio(naturalWidth / naturalHeight);
+                        }
+                      }}
+                      className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-90" 
                       alt="uploaded fish"
                     />
                   ) : (
@@ -702,17 +828,23 @@ export default function App() {
                     {points.card.map((p, i) => (
                       <div 
                         key={`c-${i}`}
-                        className="absolute w-6 h-6 bg-amber-500 rounded-full border-2 border-white shadow-lg -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-transform scale-110"
+                        className="absolute w-8 h-8 bg-amber-500 rounded-full border-2 border-white shadow-lg -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-transform scale-110 pointer-events-auto cursor-grab active:cursor-grabbing select-none"
                         style={{ left: `${p.x}%`, top: `${p.y}%` }}
+                        onMouseDown={(e) => { e.stopPropagation(); setDraggedPoint({ type: 'card', index: i }); }}
+                        onTouchStart={(e) => { e.stopPropagation(); setDraggedPoint({ type: 'card', index: i }); }}
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="text-[10px] text-white font-black">{i+1}</span>
+                        <span className="text-[12px] text-white font-black">{i+1}</span>
                       </div>
                     ))}
                     {points.fish.map((p, i) => (
                       <div 
                         key={`f-${i}`}
-                        className="absolute w-8 h-8 bg-sky-500 rounded-full border-2 border-white shadow-xl -translate-x-1/2 -translate-y-1/2 animate-pulse flex items-center justify-center transition-transform scale-110"
+                        className="absolute w-8 h-8 bg-sky-500 rounded-full border-2 border-white shadow-xl -translate-x-1/2 -translate-y-1/2 animate-pulse flex items-center justify-center transition-transform scale-110 pointer-events-auto cursor-grab active:cursor-grabbing select-none"
                         style={{ left: `${p.x}%`, top: `${p.y}%` }}
+                        onMouseDown={(e) => { e.stopPropagation(); setDraggedPoint({ type: 'fish', index: i }); }}
+                        onTouchStart={(e) => { e.stopPropagation(); setDraggedPoint({ type: 'fish', index: i }); }}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <span className="text-[12px] text-white font-black">{i+1}</span>
                       </div>
@@ -848,6 +980,21 @@ export default function App() {
                         {result.length}<span className="text-xl ml-1 font-bold">cm</span>
                       </span>
                     </div>
+                    {(() => {
+                      const speciesKeyForFactor = Object.keys(FORK_FACTORS).find(key => 
+                        species.includes(key) || key.includes(species)
+                      );
+                      const forkFactor = speciesKeyForFactor ? FORK_FACTORS[speciesKeyForFactor] : 1.00;
+                      if (forkFactor > 1.00) {
+                        return (
+                          <div className="text-[10px] text-slate-500 font-bold text-center mt-1 px-4 leading-normal flex items-center justify-center gap-1.5">
+                            <Info className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                            <span>V자 꼬리 보정 계수({forkFactor.toFixed(2)}배)가 반영된 전장(TL) 기준입니다.</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
 
                   {(result.status === 'violation') && (
@@ -1027,4 +1174,3 @@ export default function App() {
     </div>
   );
 }
-

@@ -125,12 +125,7 @@
     "closed_season": [6, 7],
     "region_notes": "6/1 ~ 7/15"
   },
-  "갈치": {
-    "min_length": 18.0,
-    "measurement_standard": "항문장",
-    "closed_season": [7, 7],
-    "region_notes": "7/1 ~ 7/31, 낚시는 금어기 제외"
-  },
+
   "고등어": {
     "min_length": 21.0,
     "measurement_standard": "전장",
@@ -304,5 +299,47 @@
     "measurement_standard": "체중(g)",
     "closed_season": [5, 6],
     "region_notes": "5/16 ~ 6/30, 시·도지사 고시 기간"
+  },
+  "가물치": {
+    "min_length": null,
+    "measurement_standard": "전장",
+    "closed_season": [null, null],
+    "region_notes": null
+  },
+  "흑점줄전갱이": {
+    "min_length": null,
+    "measurement_standard": "전장",
+    "closed_season": [null, null],
+    "region_notes": null
+  },
+  "숭어": {
+    "min_length": null,
+    "measurement_standard": "전장",
+    "closed_season": [null, null],
+    "region_notes": null
+  },
+  "뱀장어": {
+    "min_length": null,
+    "measurement_standard": "전장",
+    "closed_season": [10, 3],
+    "region_notes": "10/1 ~ 다음 해 3/31 (댐·호소 제외)"
+  },
+  "학꽁치": {
+    "min_length": null,
+    "measurement_standard": "전장",
+    "closed_season": [null, null],
+    "region_notes": null
+  },
+  "보리멸": {
+    "min_length": null,
+    "measurement_standard": "전장",
+    "closed_season": [null, null],
+    "region_notes": null
+  },
+  "성대": {
+    "min_length": null,
+    "measurement_standard": "전장",
+    "closed_season": [null, null],
+    "region_notes": null
   }
 }
